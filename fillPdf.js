@@ -1,72 +1,42 @@
-const fs = require('fs/promises'); // Use fs.promises for async file operations
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib'); // Ensure StandardFonts and rgb are imported
-const express = require('express');   // For creating the web server
-const multer = require('multer');     // For handling file uploads
-const path = require('path');         // For working with file paths
+const fs = require('fs/promises');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
 
 // Initialize Express App
 const app = express();
-const port = 3000; // The port your server will listen on
+const port = 3000;
 
-// Configure Multer to store the uploaded file in memory as a Buffer
-// This is important because pdf-lib needs the PDF content as bytes/buffer.
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Serve static files from the 'public' directory
-// When a user visits http://localhost:3000, Express will look for index.html here.
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Enable Express to parse JSON bodies from incoming requests
-// This is used to receive the form field data from your frontend.
 app.use(express.json());
 
-/**
- * Function to fill existing PDF form fields.
- * This function is designed to fill data into fields that are already present in the PDF.
- * It is distinct from adding new fillable fields.
- *
- * @param {Buffer} inputPdfBuffer - The content of the input PDF file as a Buffer.
- * @param {Object} data - An object where keys are PDF form field names and values are the text to fill.
- * @returns {Promise<Uint8Array>} A Promise that resolves with the bytes of the modified PDF.
- */
+// Existing fillExistingPdfFields function (no changes needed here)
 async function fillExistingPdfFields(inputPdfBuffer, data) {
     try {
-        // Load the existing PDF document from the provided buffer
         const pdfDoc = await PDFDocument.load(inputPdfBuffer);
-
-        // Get the form from the PDF
         const form = pdfDoc.getForm();
 
-        // Fill in the form fields
         for (const [key, value] of Object.entries(data)) {
             try {
-                // Attempt to get the text field by its name.
-                // Using getTextField is more specific than getField if you know it's a text field.
                 const field = form.getTextField(key);
                 if (field) {
-                    // Set the text of the field. Ensure the value is converted to a string.
                     field.setText(String(value));
                 } else {
-                    // Log a warning if the field is not found, but don't stop the process.
                     console.warn(`Field "${key}" not found or is not a text field in PDF form.`);
                 }
             } catch (fieldError) {
-                // Catch errors specific to accessing or setting a field (e.g., if it's not a text field type).
                 console.warn(`Error accessing/setting field "${key}": ${fieldError.message}`);
             }
         }
-
-        // Serialize the PDFDocument to bytes (a Uint8Array)
-        // This is the modified PDF content ready to be sent back.
         const pdfBytes = await pdfDoc.save();
-
-        // Return the modified PDF bytes
         return pdfBytes;
     } catch (error) {
-        // Log and re-throw any critical errors that occur during PDF processing.
         console.error('Error in fillExistingPdfFields function:', error);
-        throw error; // This error will be caught by the API endpoint's try-catch block.
+        throw error;
     }
 }
 
@@ -83,41 +53,44 @@ async function addFillableFieldsToPdf(inputPdfBuffer, fieldDefinitions) {
     try {
         const pdfDoc = await PDFDocument.load(inputPdfBuffer);
         const pages = pdfDoc.getPages();
-        // Ensure StandardFonts and rgb are directly accessible here
+        const form = pdfDoc.getForm(); // <--- GET THE FORM OBJECT HERE
         const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
         for (const field of fieldDefinitions) {
             const { pageIndex, fieldName, x, y, width, height, multiline, defaultValue } = field;
 
-            // Validate page index
             if (pageIndex < 0 || pageIndex >= pages.length) {
                 console.warn(`Skipping field "${fieldName}": Invalid page index ${pageIndex}. PDF has ${pages.length} pages.`);
-                continue; // Skip to the next field if page index is out of bounds
+                continue;
             }
 
             const page = pages[pageIndex];
 
-            // Add the text field to the specified page with given properties
-            const textField = page.addTextField(fieldName, {
+            // --- CORRECTED USAGE ---
+            // 1. Create the text field using form.createTextField()
+            const textField = form.createTextField(fieldName);
+
+            // 2. Set its default value if provided
+            if (defaultValue) {
+                textField.setText(String(defaultValue));
+            }
+
+            // 3. Add the created text field to the specified page with its properties
+            textField.addToPage(page, {
                 x: x,
                 y: y,
                 width: width,
                 height: height,
                 font: helveticaFont,
-                textColor: rgb(0, 0, 0), // Black text color
-                borderColor: rgb(0.7, 0.7, 0.7), // Light gray border
-                backgroundColor: rgb(0.95, 0.95, 0.95), // Light gray background
-                borderWidth: 1, // Border thickness
-                multiline: multiline, // Allow multiple lines of text
+                textColor: rgb(0, 0, 0),
+                borderColor: rgb(0.7, 0.7, 0.7),
+                backgroundColor: rgb(0.95, 0.95, 0.95),
+                borderWidth: 1,
+                multiline: multiline,
             });
-
-            // Set a default value if provided
-            if (defaultValue) {
-                textField.setText(String(defaultValue));
-            }
+            // --- END CORRECTED USAGE ---
         }
 
-        // Serialize the PDFDocument to bytes
         const pdfBytes = await pdfDoc.save();
         return pdfBytes;
     } catch (error) {
@@ -126,8 +99,7 @@ async function addFillableFieldsToPdf(inputPdfBuffer, fieldDefinitions) {
     }
 }
 
-// --- API Endpoint for Filling Existing PDF Forms (retained for clarity) ---
-// This endpoint will receive the PDF file and the form data for existing fields from your frontend.
+// --- API Endpoint for Filling Existing PDF Forms ---
 app.post('/fill-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) {
@@ -140,7 +112,7 @@ app.post('/fill-pdf', upload.single('pdfFile'), async (req, res) => {
             return res.status(400).send('Invalid or empty form data provided.');
         }
 
-        const modifiedPdfBytes = await fillExistingPdfFields(pdfBuffer, formData); // Call specific function
+        const modifiedPdfBytes = await fillExistingPdfFields(pdfBuffer, formData);
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="filled_form.pdf"');
@@ -153,32 +125,23 @@ app.post('/fill-pdf', upload.single('pdfFile'), async (req, res) => {
 });
 
 // --- NEW API Endpoint for Adding Fillable Fields ---
-// This endpoint will receive the PDF file and the array of new field definitions from your frontend.
 app.post('/add-fillable-fields', upload.single('pdfFile'), async (req, res) => {
     try {
-        // Check if a PDF file was uploaded by the client
         if (!req.file) {
             return res.status(400).send('No PDF file uploaded.');
         }
 
         const pdfBuffer = req.file.buffer;
-
-        // The field definitions are sent as a JSON string in the 'fields' field
         const fieldDefinitions = JSON.parse(req.body.fields);
 
-        // Basic validation for the field definitions
         if (!fieldDefinitions || !Array.isArray(fieldDefinitions) || fieldDefinitions.length === 0) {
             return res.status(400).send('Invalid or empty field definitions provided.');
         }
 
-        // Call the new function to add fillable fields
         const modifiedPdfBytes = await addFillableFieldsToPdf(pdfBuffer, fieldDefinitions);
 
-        // Set HTTP headers to instruct the browser to download the response as a PDF file
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="pdf_with_new_fields.pdf"');
-
-        // Send the modified PDF bytes back to the client
         res.send(Buffer.from(modifiedPdfBytes));
 
     } catch (error) {
@@ -189,7 +152,6 @@ app.post('/add-fillable-fields', upload.single('pdfFile'), async (req, res) => {
 
 
 // --- Start the Express Server ---
-// The server will listen for incoming HTTP requests on the specified port.
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
     console.log(`Open http://localhost:${port} in your browser to use the PDF form filler tool.`);
