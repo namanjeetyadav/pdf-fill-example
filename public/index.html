@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive PDF Form Filler</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Include PDF.js library for rendering PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Set the worker source for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive PDF Form Filler</h1>
+
+        <div class="upload-section">
+            <label for="pdfUpload">Upload PDF:</label>
+            <input type="file" id="pdfUpload" accept=".pdf">
+            <button id="loadPdfBtn">Load PDF</button>
+        </div>
+
+        <div class="pdf-viewer-container">
+            <div id="pdfMessage" class="message">Upload and load a PDF to start defining fields.</div>
+            <canvas id="pdfCanvas"></canvas>
+            <div id="drawingOverlay"></div> <!-- Overlay for drawing rectangles -->
+            <div id="pageNavigation" class="hidden">
+                <button id="prevPageBtn">Previous Page</button>
+                <span id="pageInfo">Page 1 of 1</span>
+                <button id="nextPageBtn">Next Page</button>
+            </div>
+        </div>
+
+        <div class="field-definitions-section">
+            <h2>Defined Fields</h2>
+            <div id="fieldList">
+                <!-- Dynamically added field definitions will go here -->
+                <div class="no-fields-message">No fields defined yet. Draw on the PDF above!</div>
+            </div>
+            <button id="generatePdfBtn" class="hidden">Generate Filled PDF</button>
+        </div>
+
+        <div id="statusMessage" class="message"></div>
+
+        <!-- Modal for field naming -->
+        <div id="fieldModal" class="modal hidden">
+            <div class="modal-content">
+                <h2>Name Your Field</h2>
+                <label for="fieldNameInput">Field Name:</label>
+                <input type="text" id="fieldNameInput" placeholder="e.g., customer_name" required>
+                <label for="fieldDefaultValueInput">Default Value (Optional):</label>
+                <input type="text" id="fieldDefaultValueInput" placeholder="e.g., John Doe">
+                <label for="fieldMultilineCheckbox">Multiline:</label>
+                <input type="checkbox" id="fieldMultilineCheckbox">
+                <div class="modal-buttons">
+                    <button id="saveFieldBtn">Save Field</button>
+                    <button id="cancelFieldBtn" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
